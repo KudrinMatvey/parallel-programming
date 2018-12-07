@@ -1,4 +1,4 @@
-#include"stdafx.h"
+#include"pch.h"
 #include<iostream>
 #include<ctime>
 #include"mpi.h"
@@ -64,7 +64,7 @@ int* generateOffsetArray(const int cols, const int rows, int numproc, int* amoun
 }
 
 int* generateAmountArray(const int cols, const int rows, int numproc) {
-	const int size = cols*rows;
+	const int size = cols * rows;
 	int curr = 0;
 	int i = 0;
 	int* arr = new int[numproc];
@@ -78,7 +78,7 @@ int* generateAmountArray(const int cols, const int rows, int numproc) {
 }
 
 byte* findMinMax(byte* arr, int size) {
-	byte res[] = {255, 0};
+	byte res[] = { 255, 0 };
 	for (int i = 0; i < size; i++)
 	{
 		if (arr[i] < res[0])
@@ -141,7 +141,7 @@ int main(int argc, char* argv[]) {
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	amount = new int[numproc];
 	offset = new int[numproc];
-	
+
 
 	if (rank == 0) {
 
@@ -154,14 +154,14 @@ int main(int argc, char* argv[]) {
 		int matrixSize[] = { columnNumber,rowNumber };
 		MPI_Bcast(matrixSize, 2, MPI_INT, 0, MPI_COMM_WORLD);
 
-		
+
 
 		srand(time(nullptr));
 		picture = generateRandomPicture(columnNumber, rowNumber);
 		printPicturetMatrix(picture, columnNumber, rowNumber);
 		printf("\n");
 
-		original = new byte* [columnNumber];
+		original = new byte*[columnNumber];
 
 		for (int i = 0; i < columnNumber; i++) {
 			original[i] = new byte[rowNumber];
@@ -170,18 +170,6 @@ int main(int argc, char* argv[]) {
 			}
 		}
 
-		//todo
-		/*if (numproc == 1) {
-			avg = 0;
-			for (int i = 0; i < columnNumber; i++)
-				avg += findAverage(picture[i], rowNumber) / columnNumber;
-			for (int i = 0; i < columnNumber; i++)
-				picture[i] = correctContrast(picture[i], rowNumber, avg);
-			printPicturetMatrix(picture, columnNumber, rowNumber);
-		MPI_Finalize();
-		return 0;
-		}*/
-	
 
 		amount = generateAmountArray(columnNumber, rowNumber, numproc);
 		offset = generateOffsetArray(columnNumber, rowNumber, numproc, amount);
@@ -192,8 +180,8 @@ int main(int argc, char* argv[]) {
 
 		int calculatingRank = 1;
 		for (int i = amount[0]; i < columnNumber; i++) {
-				if (i == offset[calculatingRank] + amount[calculatingRank])	calculatingRank++;
-				
+			if (i == offset[calculatingRank] + amount[calculatingRank])	calculatingRank++;
+
 			MPI_Isend(picture[i], rowNumber, MPI_BYTE, calculatingRank, i, MPI_COMM_WORLD, &request);
 			MPI_Request_free(&request);
 		}
@@ -211,21 +199,21 @@ int main(int argc, char* argv[]) {
 		tmp = findMinMax(interval, amount[0] * 2);
 
 		int *recvCount = new int[numproc];
-		byte *recvarr = new byte[numproc*2];
+		byte *recvarr = new byte[numproc * 2];
 		int* recvdispl = new int[numproc];
 		for (int j = 0; j < numproc; j++) {
-			recvarr[j*2] = 0;
+			recvarr[j * 2] = 0;
 			recvarr[j * 2 + 1] = 0;
-			recvdispl[j] = j*2;
+			recvdispl[j] = j * 2;
 			recvCount[j] = 2;
 		}
 
 		MPI_Gatherv(tmp, 2, MPI_BYTE, recvarr, recvCount, recvdispl, MPI_BYTE, 0, MPI_COMM_WORLD);
-		delete[] recvCount, recvdispl,tmp,interval;
+		delete[] recvCount, recvdispl, tmp, interval;
 		interval = findMinMax(recvarr, numproc * 2);
 		delete[] recvarr;
-		MPI_Bcast(interval, 2 , MPI_BYTE, 0, MPI_COMM_WORLD);
-		
+		MPI_Bcast(interval, 2, MPI_BYTE, 0, MPI_COMM_WORLD);
+
 
 		for (int i = 0; i < amount[rank]; i++)
 			picture[i] = correctContrast(picture[i], rowNumber, interval);
@@ -235,13 +223,47 @@ int main(int argc, char* argv[]) {
 			if (i == offset[sendingRank] + amount[sendingRank])	sendingRank++;
 			MPI_Recv(picture[i], rowNumber, MPI_BYTE, sendingRank, i, MPI_COMM_WORLD, &status);
 		}
-		cout << "Corrected matrix " << endl << endl;
+
+		cout << "Corrected matrix" << endl << endl;
 		printPicturetMatrix(picture, columnNumber, rowNumber);
 		cout << "Original hist" << endl;
 		printHist(original, columnNumber, rowNumber);
 		cout << "Corrected hist" << endl;
 		printHist(picture, columnNumber, rowNumber);
 
+
+		byte minmax[] = { 255,0 };
+		for (int i = 0; i < columnNumber; i++) {
+			byte* tmp = findMinMax(original[i], rowNumber);
+			if (minmax[0] > tmp[0])
+				minmax[0] = tmp[0];
+			if (minmax[1] < tmp[1])
+				minmax[1] = tmp[1];
+		}
+		byte **linearPic = new byte*[columnNumber];
+		for (int i = 0; i < columnNumber; i++) {
+			linearPic[i] = new byte[rowNumber];
+			linearPic[i] = correctContrast(original[i],rowNumber, minmax);
+		}
+
+		printf("Linear corrected matrix\n");
+		printPicturetMatrix(linearPic, columnNumber, rowNumber);
+		printf("Linear corrected hist\n");
+		printHist(linearPic, columnNumber, rowNumber);
+
+	/*	bool flag = 1;
+		for (int i = 0; i < columnNumber; i++) {
+			for (int j = 0; j < rowNumber; j++) {
+				if (linearPic[i][j] != picture[i][j]) {
+					printf("not equal");
+					flag = 0;
+					break;
+				}
+			}
+		}
+		if(flag)
+			printf("\nEqual!\n");
+*/
 	}
 	else {
 		MPI_Bcast(pictureSize, 2, MPI_INT, 0, MPI_COMM_WORLD);
@@ -254,22 +276,22 @@ int main(int argc, char* argv[]) {
 		picture = new byte*[columnNumber];
 		interval = new byte[amount[rank] * 2];
 		byte*  tmp;
-		for (int i = 0; i < amount[rank] ; i++)
+		for (int i = 0; i < amount[rank]; i++)
 		{
 			picture[i] = new byte[rowNumber];
-			MPI_Recv(picture[i], rowNumber, MPI_BYTE, 0, i + offset[rank], MPI_COMM_WORLD,&status);
+			MPI_Recv(picture[i], rowNumber, MPI_BYTE, 0, i + offset[rank], MPI_COMM_WORLD, &status);
 			tmp = findMinMax(picture[i], rowNumber);
 			interval[i * 2] = tmp[0];
 			interval[i * 2 + 1] = tmp[1];
 			delete tmp;
 		}
-		
+
 		tmp = findMinMax(interval, amount[0] * 2);
 
 		MPI_Gatherv(tmp, 2, MPI_BYTE, nullptr, nullptr, nullptr, MPI_BYTE, 0, MPI_COMM_WORLD);
 		MPI_Bcast(tmp, 2, MPI_BYTE, 0, MPI_COMM_WORLD);
 
-		for(int i = 0;i < amount[rank];i++){
+		for (int i = 0; i < amount[rank]; i++) {
 
 			picture[i] = correctContrast(picture[i], rowNumber, tmp);
 
@@ -282,7 +304,7 @@ int main(int argc, char* argv[]) {
 		endTime = MPI_Wtime();
 		printf("\nProgram completed in %f \n", endTime - startTime);
 	}
-	delete[]  offset, amount,picture;
+	delete[]  offset, amount, picture;
 
 
 
